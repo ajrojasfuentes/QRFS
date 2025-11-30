@@ -1,0 +1,7 @@
+#!/usr/bin/expect
+spawn ./target/release/qrfs_mount qrfolder_test mnt_test
+expect "Password"
+send "uca\r"
+expect "Montando"
+# Mantenemos el script vivo esperando indefinidamente o hasta señal
+interact
