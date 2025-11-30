@@ -1,0 +1,15 @@
+[package]
+name = "qrfs_mount"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+qrfs_lib = { version = "0.1.0", path = "../qrfs_lib" }
+fuser = "0.12"          # La librería mágica de FUSE
+libc = "0.2"            # Para errores del sistema (ENOENT, EIO, etc.)
+clap = { version = "4.4", features = ["derive"] }
+rpassword = "7.0"
+anyhow = "1.0"
+env_logger = "0.10"     # Para ver logs de qué está pasando
+log = "0.4"
+bincode = "1.3"

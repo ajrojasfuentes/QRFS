@@ -1,0 +1,21 @@
+[package]
+name = "qrfs_lib"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] } # Para serializar estructuras (convertir structs a bytes)
+bincode = "1.3"         # Serialización binaria eficiente, formato binario compacto (mejor que JSON para esto)
+thiserror = "1.0"       # Manejo de errores limpio
+chrono = { version = "0.4", features = ["serde"] } # Para fechas (mtime, ctime)
+uuid = { version = "1.0", features = ["v4", "serde"] } # Para IDs únicos si hiciera falta
+image = "0.25.9"          # Para guardar/cargar PNGs
+qrcode = "0.14.1"         # Para generar códigos QR (Escritura)
+rqrr = "0.10.0"            # Para leer códigos QR (Lectura)
+aes-gcm = "0.10"        # Cifrado (Requerido por enunciado)
+rand = "0.8"            # Generación de IV/Nonces
+pbkdf2 = "0.12"         # Derivar clave desde passphrase
+sha2 = "0.10"           # Hashing
+libc = "0.2"            # Tipos de C (necesario para FUSE a veces)
+base64 = "0.22"        # Codificación Base64 (para metadatos)
+hmac = "0.12"

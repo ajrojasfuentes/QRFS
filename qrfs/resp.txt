@@ -1,0 +1,138 @@
+crates/qrfs_lib/src/bitmap.rs
+
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Bitmap {
+    bits: Vec<u8>,
+    size: usize, // Cantidad total de bloques que rastreamos
+}
+
+impl Bitmap {
+    /// Crea un mapa nuevo con todos los bloques marcados como LIBRES (0).
+    pub fn new(total_blocks: usize) -> Self {
+        // Necesitamos 1 byte por cada 8 bloques.
+        // (total_blocks + 7) / 8 es una forma de hacer ceil div.
+        let byte_len = (total_blocks + 7) / 8;
+        Self {
+            bits: vec![0; byte_len],
+            size: total_blocks,
+        }
+    }
+
+    /// Busca el primer bloque libre, lo marca como ocupado y devuelve su índice.
+    pub fn allocate(&mut self) -> Option<u64> {
+        for i in 0..self.size {
+            if !self.get(i) {
+                self.set(i, true);
+                return Some(i as u64);
+            }
+        }
+        None // Disco lleno
+    }
+
+    /// Marca un bloque específico (ej. los del sistema) como ocupado/libre.
+    pub fn set(&mut self, index: usize, value: bool) {
+        if index >= self.size { return; }
+        
+        let byte_idx = index / 8;
+        let bit_idx = index % 8;
+        
+        if value {
+            self.bits[byte_idx] |= 1 << bit_idx; // Poner bit en 1
+        } else {
+            self.bits[byte_idx] &= !(1 << bit_idx); // Poner bit en 0
+        }
+    }
+
+    /// Verifica si un bloque está ocupado.
+    pub fn get(&self, index: usize) -> bool {
+        if index >= self.size { return false; }
+        let byte_idx = index / 8;
+        let bit_idx = index % 8;
+        (self.bits[byte_idx] & (1 << bit_idx)) != 0
+    }
+}
+
+
+crates/qrfs_lib/src/crypto.rs
+
+use aes_gcm::{
+    aead::{Aead, KeyInit, OsRng},
+    Aes256Gcm, Nonce, Key // Ojo: Aes256Gcm usa clave de 32 bytes
+};
+use pbkdf2::pbkdf2;
+use hmac::Hmac;
+use sha2::Sha256;
+use rand::RngCore;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum CryptoError {
+    #[error("La contraseña es incorrecta o los datos están corruptos")]
+    DecryptionFailed,
+    #[error("Error generando claves")]
+    KeyGenerationError,
+}
+
+// Constantes para derivar la clave
+const SALT_LEN: usize = 16;
+const ITERATIONS: u32 = 10_000; // Estándar de seguridad decente
+
+/// Estructura para manejar las llaves de cifrado en memoria
+pub struct Cipher {
+    key: Key<Aes256Gcm>,
+}
+
+impl Cipher {
+    /// Crea un Cipher derivando una clave segura desde el password del usuario.
+    /// 'salt' debe ser aleatorio y guardarse en el Superbloque (texto plano) para poder recuperar la clave luego.
+    pub fn new(password: &str, salt: &[u8]) -> Self {
+        let mut key_bytes = [0u8; 32]; // AES-256 necesita 32 bytes
+        
+        // PBKDF2: Convierte "hola123" en una llave criptográfica robusta
+        pbkdf2::<Hmac<Sha256>>(
+            password.as_bytes(),
+            salt,
+            ITERATIONS,
+            &mut key_bytes
+        ).expect("HMAC can be initialized with any key length");
+
+        Self {
+            key: *Key::<Aes256Gcm>::from_slice(&key_bytes),
+        }
+    }
+
+    /// Genera un SALT aleatorio nuevo (usar al formatear mkfs)
+    pub fn generate_salt() -> [u8; SALT_LEN] {
+        let mut salt = [0u8; SALT_LEN];
+        OsRng.fill_bytes(&mut salt);
+        salt
+    }
+
+    /// Cifra datos. Retorna: [NONCE (12 bytes) | DATOS CIFRADOS | TAG (16 bytes)]
+    pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {
+        let cipher = Aes256Gcm::new(&self.key);
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng); // 96-bits único
+        
+        // encrypt devuelve vec con datos + tag
+        let ciphertext = cipher.encrypt(&nonce, data).expect("Encryption failure!");
+        
+        // Empaquetamos todo junto: Nonce + Ciphertext
+        let mut final_packet = nonce.to_vec();
+        final_packet.extend_from_slice(&ciphertext);
+        final_packet
+    }
+
+    /// Descifra datos. Espera: [NONCE | DATOS CIFRADOS...]
+    pub fn decrypt(&self, packet: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        if packet.len() < 12 { return Err(CryptoError::DecryptionFailed); }
+
+        let cipher = Aes256Gcm::new(&self.key);
+        let nonce = Nonce::from_slice(&packet[0..12]);
+        let ciphertext = &packet[12..];
+
+        cipher.decrypt(nonce, ciphertext)
+            .map_err(|_| CryptoError::DecryptionFailed)
+    }
+}

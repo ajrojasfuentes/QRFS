@@ -1,0 +1,16 @@
+[workspace]
+
+resolver = "2"
+
+members = [
+    "crates/qrfs_lib",
+    "crates/qrfs_mkfs",
+    "crates/qrfs_mount",
+    "crates/qrfs_fsck",
+    "crates/qrfs_print",
+]
+
+# Optimizaciones para que el código corra rápido
+[profile.release]
+opt-level = 3
+lto = true
