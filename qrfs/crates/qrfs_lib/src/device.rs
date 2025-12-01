@@ -117,6 +117,18 @@ impl BlockDevice {
         }
         Ok(count)
     }
+
+    /// Elimina físicamente los archivos QR que están fuera del nuevo rango.
+    /// Útil para liberar espacio en el disco anfitrión al hacer shrink.
+    pub fn trim(&self, start_block: u64, end_block: u64) -> Result<(), DeviceError> {
+        for i in start_block..end_block {
+            let path = self.get_path(i);
+            if path.exists() {
+                fs::remove_file(path)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

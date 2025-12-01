@@ -1,3 +1,5 @@
+// qrfs/crates/qrfs_mount/src/fs.rs
+
 use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
     ReplyCreate, ReplyWrite, ReplyEmpty, ReplyStatfs, ReplyOpen, Request,

@@ -50,6 +50,40 @@ impl Bitmap {
         let bit_idx = index % 8;
         (self.bits[byte_idx] & (1 << bit_idx)) != 0
     }
+
+    /// Intenta redimensionar el mapa de bits.
+    /// Retorna Error si intentamos reducir y hay bloques ocupados en la zona a eliminar.
+    pub fn resize(&mut self, new_total_blocks: usize) -> Result<(), String> {
+        if new_total_blocks > self.size {
+            // --- CRECIMIENTO ---
+            // Calcular nuevos bytes necesarios
+            let new_byte_len = (new_total_blocks + 7) / 8;
+            // Extender con ceros (libre)
+            self.bits.resize(new_byte_len, 0);
+            self.size = new_total_blocks;
+        } else if new_total_blocks < self.size {
+            // --- REDUCCIÓN ---
+            // Verificar que no estemos cortando datos
+            for i in new_total_blocks..self.size {
+                if self.get(i) {
+                    return Err(format!("No se puede reducir: El bloque {} está en uso.", i));
+                }
+            }
+            // Si es seguro, cortamos el vector
+            let new_byte_len = (new_total_blocks + 7) / 8;
+            self.bits.truncate(new_byte_len);
+            
+            // Limpiar los bits sobrantes del último byte (para que no queden 'sucios')
+            if new_total_blocks % 8 != 0 {
+                let last_idx = self.bits.len() - 1;
+                let mask = (1 << (new_total_blocks % 8)) - 1;
+                self.bits[last_idx] &= mask;
+            }
+            
+            self.size = new_total_blocks;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

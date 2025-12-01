@@ -1,3 +1,5 @@
+// qrfs/crates/qrfs_mkfs/src/main.rs
+
 use clap::Parser;
 use qrfs_lib::device::BlockDevice;
 use qrfs_lib::types::{SuperBlock, Inode, FileType, BLOCK_SIZE, DIRECT_POINTERS, QRFS_MAGIC};
