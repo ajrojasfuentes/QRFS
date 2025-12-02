@@ -65,7 +65,7 @@ impl BlockDevice {
         Ok(())
     }
 
-    /// LEER: Imagen -> Upscale (Zoom) -> Detectar QR -> Texto Base64 -> Bytes Originales
+    /// LEER: Imagen -> Upscale (Zoom Entero) -> Detectar QR -> Bytes
     pub fn read_block(&self, block_id: u64) -> Result<Vec<u8>, DeviceError> {
         let path = self.get_path(block_id);
         
@@ -73,19 +73,22 @@ impl BlockDevice {
             return Ok(vec![0u8; BLOCK_SIZE]);
         }
 
-        // 1. Cargar imagen original (probablemente pequeña, 177x177)
+        // 1. Cargar imagen original
         let img = image::open(path)?.to_luma8();
         
-        // 2. TRUCO DE LA LUPA: Redimensionar en memoria
-        // Escalamos a 400x400 usando 'Nearest' para mantener bordes nítidos.
-        // Esto le da a 'rqrr' suficientes píxeles para detectar los patrones.
-        let scaled_img = imageops::resize(&img, 400, 400, FilterType::Nearest);
+        // 2. CORRECCIÓN: Escalar por un factor entero (x2 o x3)
+        // Esto evita el "aliasing" o deformación de los píxeles.
+        // Si el QR original es ~185px, x2 = 370px, que es suficiente para rqrr.
+        let width = img.width() * 2;
+        let height = img.height() * 2;
         
-        // 3. Convertir de vuelta a Luma8 para rqrr
+        let scaled_img = imageops::resize(&img, width, height, FilterType::Nearest);
+        
+        // 3. Preparar imagen escalada
         let dynamic_scaled = image::DynamicImage::ImageLuma8(scaled_img);
         let gray_scaled = dynamic_scaled.to_luma8();
 
-        // 4. Preparar para lectura con la imagen grande
+        // 4. Preparar para detección
         let mut prepared_img = PreparedImage::prepare(gray_scaled);
         
         // 5. Detectar y Decodificar

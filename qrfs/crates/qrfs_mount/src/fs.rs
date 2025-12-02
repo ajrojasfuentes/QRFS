@@ -416,12 +416,42 @@ impl Filesystem for QRFS {
         }
     }
 
-    // 10. WRITE: Escribir datos
-    fn write(&mut self, _req: &Request, ino: u64, _fh: u64, offset: i64, data: &[u8], _wflags: u32, _flags: i32, _lock: Option<u64>, reply: ReplyWrite) {
-        if offset != 0 { /* Simplificado: Solo reescritura total */ }
-        if let Err(e) = self.write_inode_data(ino, data) {
+    // 10. WRITE: Escribir datos con soporte de Offset (CORREGIDO)
+    fn write(&mut self, _req: &Request, ino: u64, _fh: u64, offset: i64, data: &[u8], _wf: u32, _fl: i32, _lo: Option<u64>, reply: ReplyWrite) {
+        // 1. Obtener el inodo para saber el tamaño actual
+        let inode = match self.inodes.get(&ino) {
+            Some(i) => i.clone(), // Clonamos para no bloquear self
+            None => { reply.error(ENOENT); return; }
+        };
+
+        // 2. Preparar el buffer final de datos
+        let mut final_data = if offset > 0 {
+            // Si hay offset, necesitamos recuperar lo que ya estaba escrito
+            match self.read_inode_data(&inode) {
+                Ok(existing_data) => existing_data,
+                Err(e) => { reply.error(e); return; }
+            }
+        } else {
+            // Si offset es 0, optimización: asumimos que empezamos de cero 
+            // (o si cp hizo truncate antes, estará vacío)
+            Vec::new()
+        };
+
+        // 3. Expandir el buffer si el offset está más allá del final actual (huecos)
+        let write_end = (offset as usize) + data.len();
+        if final_data.len() < write_end {
+            final_data.resize(write_end, 0);
+        }
+
+        // 4. Pegar los nuevos datos en la posición correcta
+        // Esto sobrescribe solo el pedazo que Linux mandó, respetando lo anterior
+        final_data[offset as usize..write_end].copy_from_slice(data);
+
+        // 5. Guardar todo el conjunto de nuevo
+        if let Err(e) = self.write_inode_data(ino, &final_data) {
             reply.error(e);
         } else {
+            // FUSE espera que devolvamos cuánto escribimos en ESTA llamada, no el total
             reply.written(data.len() as u32);
         }
     }
